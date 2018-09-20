@@ -17,4 +17,5 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-//Route::post('paymentmetods', '');
+Route::post('payments', 'ApiController@makePayment');
+Route::get('validations/{paymentmethodtype}', 'ApiController@validatePaymentAccountWithPaymentMethodeType');

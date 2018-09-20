@@ -15,7 +15,7 @@ class User
 
     public function __construct($b_id, $firstname, $lastname, $email)
     {
-        $this->b_id - $b_id;
+        $this->b_id = $b_id;
         $this->firstname = $firstname;
         $this->lastname = $lastname;
         $this->email = $email;
