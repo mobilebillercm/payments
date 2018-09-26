@@ -15,6 +15,7 @@ class PaymentMethodType extends Model
 {
     const CREDIT_CARD = "0";
     const MOBILE_MONEY = "1";
+    const MOBILE_BILLER_ACCOUNT = "2";
     //const
     protected $table = 'paymentmethodtypes';
     protected $fillable = ['b_id', 'name', 'description', 'provider', 'icon', 'active', 'api', 'created_by', 'created_at', 'updated_at'];

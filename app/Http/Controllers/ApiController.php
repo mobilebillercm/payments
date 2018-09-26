@@ -88,9 +88,14 @@ class ApiController extends Controller
         }
 
         $paymentMethod = $paymentMethods[0];
-        $api = $paymentMethod->api;
-        $url = 'https://jsonplaceholder.typicode.com/posts'; //Todo $api->paymentUrl;
 
+        //return json_encode($paymentMethod);
+
+        $api = $paymentMethod->api;
+        $apiObject = json_decode($api);
+        $url = $apiObject->paymentUrl;//'https://jsonplaceholder.typicode.com/posts'; //Todo $api->paymentUrl;
+
+        //return $url;
 
         $client = new Client();
         try {
@@ -128,7 +133,7 @@ class ApiController extends Controller
 
             $payment->save();
             //Todo Dispatch to service validation
-            return response(array('success'=>1, 'faillure' => 0, 'response' => (string)$response->getBody()), 200);
+            return response(array('success'=>1, 'faillure' => 0, 'response' => 'Paiement effectue avec success'/*(string)$response->getBody()*/), 200);
 
             /*$result = (string)$response->getBody();
 
