@@ -71,6 +71,8 @@ class ApiController extends Controller
             'payment_method_id'=> 'required|string|min:1',
             'card_number'=> 'required|string|min:1',
             'card_holder'=> 'required|string|min:1',
+            'expiry_date'=> 'required|string|min:1|max:10',
+            'security_code'=> 'required|string|min:3|max:3',
             'user_id'=> 'required|string|min:1',
 
         ]);
