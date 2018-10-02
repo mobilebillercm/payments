@@ -17,5 +17,5 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
 
-Route::post('payments', 'ApiController@makePayment');
-Route::get('validations/{paymentmethodtype}', 'ApiController@validatePaymentAccountWithPaymentMethodeType');
+Route::post('payments', 'ApiController@makePayment')->middleware('token.verification');
+Route::get('validations/{paymentmethodtype}', 'ApiController@validatePaymentAccountWithPaymentMethodeType')->middleware('token.verification');

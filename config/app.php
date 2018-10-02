@@ -160,6 +160,7 @@ return [
         App\Providers\EventServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
         Propaganistas\LaravelIntl\IntlServiceProvider::class,
+        Laravel\Passport\PassportServiceProvider::class,
 
     ],
 
