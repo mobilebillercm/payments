@@ -9,6 +9,7 @@ use App\domain\model\PaymentMethodType;
 use App\domain\model\Price;
 use App\domain\model\Service;
 use App\domain\model\User;
+use App\Jobs\ProcessMessages;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\BadResponseException;
 use Illuminate\Http\Request;
@@ -57,9 +58,11 @@ class ApiController extends Controller
         return (json_last_error());
     }
 
-    public function makePayment(Request $request){
+    public function makePaymentWithMobileBillerAcount(Request $request){
 
-        // Todo Secutity Issue : Replay
+
+        //return $request->all();
+
 
         $validator = Validator::make($request->all(), [
             'service_id'=> 'required|string|min:1|max:150',
@@ -68,12 +71,193 @@ class ApiController extends Controller
             'time_value'=> 'required|string|min:1',
             'amount_curency'=> 'required|string|min:1',
             'amount_value'=> 'required|string|min:1',
-            'payment_method_id'=> 'required|string|min:1',
-            'card_number'=> 'required|string|min:1',
-            'card_holder'=> 'required|string|min:1',
-            'expiry_date'=> 'required|string|min:1|max:10',
-            'security_code'=> 'required|string|min:3|max:3',
+            'tenantid'=> 'required|string|min:1',
+            'beneficiarytenantid'=> 'required|string|min:1',
             'user_id'=> 'required|string|min:1',
+            'mobilebilleraccount'=>'required|string|min:1',
+            'password'=>'required|string|min:1',
+            'user_payment_number'=>'required|integer'
+        ]);
+
+        if ($validator->fails()){
+
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => $validator->errors()->first()), 200);
+        }
+
+        $payments = Payment::where('user_payment_number', '=', $request->get('user_payment_number'))->where('userid', '=', $request->get('user_id'))->get();
+
+        if(!(count($payments) === 0)){
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => 'Faked payement'), 200);
+        }
+
+
+
+        try {
+
+
+            $duration = new Duration($request->get('time_unit'), $request->get('time_value'));
+            $amount = new Amount($request->get('amount_curency'), $request->get('amount_value'));
+            $price = new Price($amount,$duration);
+            $service = new Service($request->get('service_id'), $request->get('service_name'), $request->get('service_description'));
+            $user = new User($request->get('user_id'), $request->get('firstname'), $request->get('lastname'), $request->get('username'));
+            $beneciciary = new User($request->get('beneficiary_id'), $request->get('beneficiary_firstname'), $request->get('beneficiary_lastname'), $request->get('beneficiary_username'));
+
+            $paymentMethods = PaymentMethodType::where('name','=','MOBILEBILLERCM')->get();
+
+
+            if(!(count($paymentMethods) === 1)){
+                return response(array('success'=>0, 'faillure' => 1, 'raison' => 'Wrong number of records'), 200);
+            }
+
+
+
+            $client = new Client();
+
+            $token = null;
+
+            try {
+
+
+                $tokenUrl = env('HOST_IDENTITY_AND_ACCESS') . '/oauth/token';
+
+
+                $tokenData = $client->post($tokenUrl, [
+                    'form_params' => [
+                        'grant_type' => 'client_credentials',
+                        'client_id' => env('IDENTITY_AND_ACCESS_CLIENT_ID'),
+                        'client_secret' => env('IDENTITY_AND_ACCESS_CLIENT_SECRET'),
+                    ],
+                ]);
+
+                $token = json_decode((string)$tokenData->getBody());
+
+                $url = env('HOST_IDENTITY_AND_ACCESS').'/api/users/'.$request->get('username').'/verify';
+
+                $res = $client->post($url, [
+                    'headers' => [
+                        'Authorization' => '' . $token->access_token,
+                    ],
+                    'form_params'=>$request->all()
+                ]);
+
+
+                $isjson = $this->is_JSON((string)$res->getBody());
+
+                if(!($isjson == 0)){
+
+                    return response(array('success'=>0, 'faillure'=>1, 'raison'=>'Authentication Failed 1'),200);
+                }
+
+                $login = json_decode( (string) $res->getBody());
+
+
+                if($login->success === 0 and $login->faillure === 1){
+
+                    return response(array('success'=>0, 'faillure'=>1, 'raison'=>'Authentication Failed 2 ' . $login->raison),200);
+
+                }
+
+
+            } catch (BadResponseException $e) {
+
+                return response(array('success'=>0, 'faillure'=>1, 'raison'=>'Authentication Failed 3 ' . $e->getMessage()),200);
+
+            }
+
+
+
+
+            $payment = new Payment(Uuid::generate()->string, $request->get('user_payment_number'), $paymentMethods[0], $price, $service, $request->get('mobilebilleraccount'),
+                $user, $beneciciary,Payment::INITIATED,0, $request->get('beneficiary_id'), $request->get('beneficiarytenantid'));
+
+            $payment->save();
+
+
+            $payment->mobilebillercreditaccount = $request->get('mobilebilleraccount');
+
+
+            ProcessMessages::dispatch(env('SERVICE_PAYEMENT_WITH_MOBILE_BILLER_CREDIT_ACCOUNT_INITIATED_EXCHANGE'), env('RABBIT_MQ_EXCHANGE_TYPE'), json_encode($payment));
+
+
+            return response(array('success'=>1, 'faillure' => 0, 'response' => 'Paiement effectue avec success'), 200);
+
+
+
+        } catch (BadResponseException $e) {
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => $e->getMessage()), 200);
+        }
+
+
+    }
+
+    public function confirmPaymentWithMobileBillerAcount(){
+
+        $body = file_get_contents('php://input');
+
+
+
+        $data = json_decode($body, true);
+
+
+
+
+
+        $validator = Validator::make($data, [
+            'paymentid'=> 'required|string|min:1|max:150',
+        ]);
+
+        if ($validator->fails()){
+
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => $validator->errors()->first()), 200);
+        }
+
+
+        $payments = Payment::where('b_id', '=', $data['paymentid'])->get();
+
+
+
+
+
+
+        if((count($payments) === 0)){
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => 'Payment not found'), 200);
+        }
+
+
+
+        try {
+
+
+            $payments[0]->status = Payment::ACCEPTED;
+            $payments[0]->save();
+
+
+
+
+        } catch (BadResponseException $e) {
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => $e->getMessage()), 200);
+        }
+
+
+        ProcessMessages::dispatch(env('SERVICE_PAYEMENT_WITH_MOBILE_BILLER_CREDIT_ACCOUNT_ACCEPTED_EXCHANGE'), env('RABBIT_MQ_EXCHANGE_TYPE'),
+            json_encode($payments[0]));
+
+        return response(array('success'=>1, 'faillure' => 0, 'response' => 'Paiement effectue avec success'), 200);
+
+    }
+
+    public function failPaymentWithMobileBillerAcount(){
+
+        $body = file_get_contents('php://input');
+
+        //return $body;
+
+        $data = json_decode($body, true);
+
+
+
+        $validator = Validator::make($data, [
+            'paymentid'=> 'required|string|min:1|max:150',
 
         ]);
 
@@ -82,79 +266,37 @@ class ApiController extends Controller
             return response(array('success'=>0, 'faillure' => 1, 'raison' => $validator->errors()->first()), 200);
         }
 
-        // Payment metod
 
-        $paymentMethods = PaymentMethodType::where('b_id', '=', $request->get('payment_method_id'))->get();
-        if (!(count($paymentMethods) === 1)){
-            return response(array('success'=>0, 'faillure' => 1, 'raison' => 'Payment method not found'), 200);
+        //return $data['paymentid'];
+
+        $payments = Payment::where('b_id', '=', $data['paymentid'])->get();
+
+        //return json_encode($payments);
+
+        if((count($payments) === 0)){
+            return response(array('success'=>0, 'faillure' => 1, 'raison' => 'Payment not found'), 200);
         }
 
-        $paymentMethod = $paymentMethods[0];
 
-        //return json_encode($paymentMethod);
 
-        $api = $paymentMethod->api;
-        $apiObject = json_decode($api);
-        $url = $apiObject->paymentUrl;//'https://jsonplaceholder.typicode.com/posts'; //Todo $api->paymentUrl;
-
-        //return $url;
-
-        $client = new Client();
         try {
 
-            $params = array('title'=>$request->get('service_name'), 'body'=>$request->get('amount_value') . " | " . $request->get('card_number'), 'userId'=>1);
 
-            $response = $client->post($url, [
-                'headers'=>[
-                    "Content-type"=>"application/json; charset=UTF-8",
-                ],
-                'body'=>json_encode($params)
-            ]);
+            $payments[0]->status = Payment::REFUSED;
+            $payments[0]->save();
 
-            //return (string)$response->getBody();
 
-            $isjson = $this->is_JSON((string)$response->getBody());
-
-            if(!($isjson == 0)){
-                return response(array('success'=>0, 'faillure' => 1, 'raison' => (string)$response->getBody()), 200);
-            }
-
-            $duration = new Duration($request->get('time_unit'), $request->get('time_value'));
-            $amount = new Amount($request->get('amount_curency'), $request->get('amount_value'));
-            $price = new Price($amount,$duration);
-
-            $service = new Service($request->get('service_id'), $request->get('service_name'), $request->get('service_description'));
-
-            $user = new User($request->get('user_id'), $request->get('firstname'), $request->get('lastname'), $request->get('username'));
-
-            $card = new CreditCard(Uuid::generate()->string, $request->get('card_number'),
-                $request->get('card_holder'), $request->get('expiry_date'), $request->get('security_code'), $request->get('issuer'),
-                1, $user);
-
-            $payment = new Payment(Uuid::generate()->string, $paymentMethod, $price,$service, $card, $user, $user,true,0);
-
-            $payment->save();
-            //Todo Dispatch to service validation
-            return response(array('success'=>1, 'faillure' => 0, 'response' => 'Paiement effectue avec success'/*(string)$response->getBody()*/), 200);
-
-            /*$result = (string)$response->getBody();
-
-            $myresponse = json_decode($result, true);
-
-            $key = 'response';
-            if($myresponse['success'] === 0 and $myresponse['faillure']===1){
-                $key = 'raison';
-            }
-
-            return Redirect::back()->with('message',array('receiveResultStatusCode' => 200,
-                'result'=>array("success"=>$myresponse['success'], 'faillure'=>$myresponse['faillure'], "$key"=>$myresponse[$key])));
-
-            //return response(array('success'=>1, 'faillure' => 0, 'response' => $response->getBody()), 200);*/
 
         } catch (BadResponseException $e) {
             return response(array('success'=>0, 'faillure' => 1, 'raison' => $e->getMessage()), 200);
         }
 
+
+        ProcessMessages::dispatch(env('SERVICE_PAYEMENT_WITH_MOBILE_BILLER_CREDIT_ACCOUNT_REFUSED_EXCHANGE'), env('RABBIT_MQ_EXCHANGE_TYPE'),
+            json_encode(array('payment'=>$payments[0], 'message'=>$data['message'])));
+
+
+        return response(array('success'=>1, 'faillure' => 0, 'response' => 'Paiement effectue avec success'), 200);
 
     }
 
@@ -175,8 +317,6 @@ class ApiController extends Controller
         }
         return true;
     }
-
-
 
     public function validatePaymentAccountWithPaymentMethodeType(Request $request, $paymentMethodeTypeId){
 
@@ -301,3 +441,4 @@ class ApiController extends Controller
 
     }
 }
+

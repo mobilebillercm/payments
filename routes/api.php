@@ -13,9 +13,27 @@ use Illuminate\Http\Request;
 |
 */
 
+
+
+Route::post('payments', 'ApiController@makePaymentWithMobileBillerAcount')->middleware('token.verification');
+
+Route::post('payments-from-mobile-biller-credit-account-accepted', 'ApiController@confirmPaymentWithMobileBillerAcount')->middleware('rabbitmq.client');
+
+Route::post('payments-from-mobile-biller-credit-account-failed', 'ApiController@failPaymentWithMobileBillerAcount')->middleware('rabbitmq.client');
+
+Route::get('validations/{paymentmethodtype}', 'ApiController@validatePaymentAccountWithPaymentMethodeType')->middleware('token.verification');
+
+
+
+
+
+
+
+
+
+
+
+
 Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
-
-Route::post('payments', 'ApiController@makePayment')->middleware('token.verification');
-Route::get('validations/{paymentmethodtype}', 'ApiController@validatePaymentAccountWithPaymentMethodeType')->middleware('token.verification');

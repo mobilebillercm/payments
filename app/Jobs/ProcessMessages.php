@@ -10,10 +10,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
 
-class ProccessMessage implements ShouldQueue
+class ProcessMessages implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
 
     protected $message;
     protected  $exchangeName;
@@ -57,7 +56,6 @@ class ProccessMessage implements ShouldQueue
             $channel->exchange_declare($exchangeName, $exchangetype, false, true, false);
 
 
-
             $msg = new AMQPMessage($message, array('delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT));
 
             $channel->basic_publish($msg, $exchangeName);
@@ -76,5 +74,4 @@ class ProccessMessage implements ShouldQueue
         }
 
     }
-
 }
